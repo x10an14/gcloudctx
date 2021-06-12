@@ -1,5 +1,4 @@
 # gcloudctx
-[![Build Status](https://travis-ci.org/ogerbron/gcloudctx.svg?branch=master)](https://travis-ci.org/ogerbron/gcloudctx/)
 
 gcloudctx (gcloud context) is a tool to easily manage and switch between several gcloud project.
 
@@ -11,61 +10,46 @@ written by [ahmetb](https://github.com/ahmetb/). Thanks a lot for it!
 ### Usage
 ```
 USAGE:
-  gcloudctx                   : list the projects
-  gcloudctx <NAME>            : switch to project <NAME>
-  gcloudctx -                 : switch to the previous project
-  gcloudctx <NEW_NAME>=<NAME> : rename project <NAME> to <NEW_NAME>
-  gcloudctx <NEW_NAME>=.      : rename current-project to <NEW_NAME>
-  gcloudctx -d <NAME>         : delete project <NAME> ('.' for current-project)
-                                (this command won't delete the user/cluster entry
-                                that is used by the project)
+        gcloudctx <NAME>                        : switch to project <NAME>
+        gcloudctx .                             : list the current project
+        gcloudctx -                             : switch to the previous project
 
-  gcloudctx -h,--help         : show this message
+        gcloudctx --previous			: list the previous project (if any)
+        gcloudctx -l, --list                    : list the projects
+        gcloudctx -h,--help                     : show this message
 ```
 
 Examples:
 ```sh
 # Display gcloud projects
-$ gcloudctx
+$ gcloudctx --current
+project1		# stdout
+
+# List all projects
+$ gcloudctx --list	# stdout
 project1
 project2
 testing-project
 
-# Switch project
-$ gcloudctx testing-project
-Activated [testing-environments].
+# Switch to specified (fzf-searchable) project
+$ gcloudctx test
+gcloudctx switched to project:	testing-project # stderr
 
 # Switch to previous project
 $ gcloudctx -
-Activated [project1].
-
-# Create alias for project1
-$ gcloudctx production=project1
-Aliased "project1" as "production".
-
-# Delete a project
-$ gcloudctx -d project2
-Deleting project "project2"...
-The following configurations will be deleted:
- - project2
-Do you want to continue (Y/n)?  y
-
-Deleted [project2].
+gcloudctx switched to project:	project1	# stderr
 ```
 
-`gcloudctx` supports <kbd>Tab</kbd> completion on bash/zsh/fish shells to quickly type project names.
+`fzf` (which `gcloudctx` uses) supports <kbd>Tab</kbd> completion on bash/zsh/fish shells to quickly type project names.
 
 ## Installation
 
 ### Linux/macOS
 
-`gcloudctx` is written in Bash, so you should be able to install
-it to any POSIX environment that has Bash installed.
+`gcloudctx` is written in Bash, so you should be able to install it to any POSIX environment that has Bash installed.
 
-1. Download the `gcloudctx` script somewhere in your `PATH` and make it executable
+Download the `gcloudctx` script somewhere in your `PATH` and make it executable
 ```bash
 sudo curl -L https://raw.githubusercontent.com/ogerbron/gcloudctx/master/gcloudctx -o /usr/local/bin/gcloudctx
 sudo chmod +x /usr/local/bin/gcloudctx
 ```
-2. Install bash/zsh/fish [completion scripts](completion/) (e.g. for Ubuntu, copy the scripts to `/etc/bash_completion.d/`
-and restart your terminal)

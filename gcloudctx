@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # gcloudctx(1) is a utility to manage and switch between gcloud projects.
 
@@ -8,7 +8,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#	 http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,188 +30,137 @@ YELLOW=$(tput setaf 3)
 DARKBG=$(tput setab 0)
 NORMAL=$(tput sgr0)
 
-usage() {
-  cat <<"EOF"
-USAGE:
-  gcloudctx                              : list the projects
-  gcloudctx <NAME>                       : switch to project <NAME>
-  gcloudctx -                            : switch to the previous project
-  gcloudctx <NEW_NAME>=<NAME>            : rename project <NAME> to <NEW_NAME>
-  gcloudctx -f/--force <NEW_NAME>=<NAME> : force renaming of project <NAME> to <NEW_NAME>
-                                           when <NEW_NAME> already exists
-
-  gcloudctx <NEW_NAME>=.                 : rename current-project to <NEW_NAME>
-  gcloudctx -d <NAME>                    : delete project <NAME> ('.' for current-project)
-                                           (this command won't delete the user/cluster entry
-                                           that is used by the project)
-
-  gcloudctx -h,--help                    : show this message
-EOF
-  exit 1
-}
-
 current_project() {
-  gcloud config configurations list --filter="IS_ACTIVE=True" --format="table(name)" | grep -v NAME
+	gcloud config configurations list \
+		--format=json \
+		| jq -r '.[] | select(.is_active==true).properties.core.project'
 }
 
 get_projects() {
-   gcloud config configurations list --format="table(name)" | grep -v NAME
+	 gcloud projects list --format=json | jq -r '.[].projectId'
 }
 
 list_projects() {
-  set -u pipefail
-  local cur
-  cur="$(current_project)"
+	set -u pipefail
+	local cur
+	cur="$(current_project)"
 
-  for c in $(get_projects); do
-  if [[ -t 1 && "${c}" = "${cur}" ]]; then
-    echo "${DARKBG}${YELLOW}${c}${NORMAL}"
-  else
-    echo "${c}"
-  fi
-  done
+	for c in $(get_projects); do
+		if [[ -t 1 && "${c}" = "${cur}" ]]; then
+			echo "${DARKBG}${YELLOW}${c}${NORMAL}"
+		else
+			echo "${c}"
+		fi
+	done
 }
 
-read_project() {
-  if [[ -f "${GCLOUDCTX}" ]]; then
-    cat "${GCLOUDCTX}"
-  fi
+get_previous_project() {
+	if [[ -f "${GCLOUDCTX}" ]]; then
+		cat "${GCLOUDCTX}"
+	fi
 }
 
-save_project() {
-  local saved
-  saved="$(read_project)"
+save_previous_project() {
+	local saved
+	saved="$(get_previous_project)"
 
-  if [[ "${saved}" != "${1}" ]]; then
-    printf %s "${1}" > "${GCLOUDCTX}"
-  fi
+	if [[ "${saved}" != "${1}" ]]; then
+		printf %s "${1}" > "${GCLOUDCTX}"
+	fi
 }
 
 switch_project() {
-  gcloud config configurations activate "${1}"
+	local target
+	target="${1}"
+	output="$(gcloud config set project "${target}" 2>&1)"
+	if [[ "$output" != "Updated property [core/project]." ]]; then
+		# Silence default uninteresting output
+		echo $output 1>&2
+	fi
+	echo -e "gcloudctx switched to project:\\t${target}" 1>&2
 }
 
 set_project() {
-  local prev
-  prev="$(current_project)"
+	local prev
+	prev="$(current_project)"
 
-  switch_project "${1}"
+	if [[ "${prev}" != "${1}" ]]; then
+		save_previous_project "${prev}"
+	fi
 
-  if [[ "${prev}" != "${1}" ]]; then
-    save_project "${prev}"
-  fi
+	switch_project "${1}"
 }
 
-swap_project() {
-  local ctx
-  ctx="$(read_project)"
-  if [[ -z "${ctx}" ]]; then
-    echo "error: No previous project found." >&2
-    exit 1
-  fi
-  set_project "${ctx}"
+swap_to_previous_project() {
+	local previous_project
+	previous_project="$(get_previous_project)"
+	if [[ -z "${previous_project}" ]]; then
+		echo "error: No previous project found." >&2
+		exit 1
+	fi
+	set_project "${previous_project}"
 }
 
 project_exists() {
-  grep -q ^"${1}"\$ <(gcloud config configurations list --format="table(name)" | grep -v NAME)
+	grep -q "^${1}\$" <(get_projects)
 }
 
-rename_project() {
-  local old_name="${1}"
-  local new_name="${2}"
+usage() {
+	cat <<"EOF"
+USAGE:
+	gcloudctx <NAME>			: switch to project <NAME>
+	gcloudctx .				: list the current project
+	gcloudctx -				: switch to the previous project
 
-  if [[ "${old_name}" == "." ]]; then
-    old_name="$(current_project)"
-  fi
-
-  if project_exists "${new_name}"; then
-    echo "Project name \"${new_name}\" already exists" >&2
-    if [[ "${FORCE_RENAME}" == "true" ]]; then
-      echo "Force renaming activated, removing former project \"${new_name}\"" >&2
-      rm -f $GCLOUDCONF/configurations/config_${new_name}
-    else
-      echo "Force renaming deactivated, use -f/--force to remove the existing project" >&2
-      echo "gcloudctx -f/--force <NEW_NAME>=<NAME>" >&2
-      exit 1
-    fi
-  fi
-  mv $GCLOUDCONF/configurations/config_{"${old_name}","${new_name}"}
-  echo "Renamed ${old_name} to ${DARKBG}${YELLOW}${new_name}${NORMAL}" >&2
-  gcloud config configurations activate "${new_name}"
-}
-
-delete_project() {
-  local ctx
-  ctx="${1}"
-  if [[ "${ctx}" == "." ]]; then
-    ctx="$(current_project)"
-  fi
-  echo "Deleting project \"${ctx}\"..." >&2
-  gcloud config configurations delete "${ctx}"  
+	gcloudctx --previous			: list the previous project (if any)
+	gcloudctx -l, --list			: list the projects
+	gcloudctx -h,--help			: show this message
+EOF
+	exit 1
 }
 
 main() {
-  if [[ "$#" -eq 0 ]]; then
-    list_projects
-  fi
+	if [[ "$#" -eq 0 ]]; then
+		set_project "$(list_projects | fzf --ansi --select-1)"
+	fi
 
-  #Getting input args
-  while [[ $# -gt 0 ]]
-  do
-    case $1 in
-      --delete|-d)
-        shift
-        if [[ "$#" -lt 1 ]]; then
-          echo "error: missing project NAME" >&2
-          usage
-        elif [[ "$#" -gt 1 ]]; then
-          echo "error: too many arguments" >&2
-          usage
-        fi
-        delete_project "${1}"
-        break
-        ;;
-      --force|-f)
-        shift
-        FORCE_RENAME="true"
-        if [[ "$#" -lt 1 ]]; then
-          echo "error: missing project NAME" >&2
-          usage
-        elif [[ "$#" -gt 1 ]]; then
-          echo "error: too many arguments" >&2
-          usage
-        fi
-        ;;
-      *=*)
-        if [[ "${1}" =~ (.+)=(.+) ]]; then
-          rename_project "${BASH_REMATCH[2]}" "${BASH_REMATCH[1]}"
-        else
-          echo "Wrong syntax" >&2
-          usage
-        fi
-        break
-        ;;
-      -)
-        swap_project
-        break
-        ;;
-      -h|--help)
-        usage
-        break
-        ;;
-      -*)
-        echo "error: unrecognized flag \"${1}\"" >&2
-        usage
-        exit 1
-        ;;
-      *)
-        set_project "${1}"
-        break
-        ;;
-    esac
-  done
+	#Getting input args
+	while [[ $# -gt 0 ]]
+	do
+	case $1 in
+		.)
+			current_project
+			break
+		;;
+		-)
+			swap_to_previous_project
+			break
+		;;
+		-l|--list)
+			list_projects
+			break
+		;;
+		--previous)
+			get_previous_project; echo
+			break
+		;;
+		-h|--help)
+			usage
+			break
+		;;
+		-*)
+			echo "error: unrecognized flag \"${1}\"" >&2
+			usage
+			exit 1
+		;;
+		*)
+			set_project "$(list_projects | fzf --ansi --select-1 --query "${1}")"
+			break
+		;;
+	esac
+	done
 
-  shift $((OPTIND - 1))
+	shift $((OPTIND - 1))
 }
 
 main "$@"
